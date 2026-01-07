@@ -1,36 +1,294 @@
 ---
-- name: Install Clickhouse
+- name: Install ClickHouse on Ubuntu
   hosts: clickhouse
   handlers:
-    - name: Start clickhouse service
+    # Handler для ClickHouse
+    - name: Restart clickhouse service
       become: true
       ansible.builtin.service:
         name: clickhouse-server
         state: restarted
+
   tasks:
-    - block:
-        - name: Get clickhouse distrib
-          ansible.builtin.get_url:
-            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
-            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
-          with_items: "{{ clickhouse_packages }}"
-      rescue:
-        - name: Get clickhouse distrib
-          ansible.builtin.get_url:
-            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
-            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
-    - name: Install clickhouse packages
+    # 1. Устанавливаем зависимости
+    - name: Install required packages for ClickHouse
       become: true
-      ansible.builtin.yum:
+      ansible.builtin.apt:
         name:
-          - clickhouse-common-static-{{ clickhouse_version }}.rpm
-          - clickhouse-client-{{ clickhouse_version }}.rpm
-          - clickhouse-server-{{ clickhouse_version }}.rpm
-      notify: Start clickhouse service
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - curl
+        state: present
+        update_cache: yes
+
+    # 2. Добавляем GPG ключ правильным способом
+    - name: Add ClickHouse GPG key
+      become: true
+      ansible.builtin.shell: |
+        curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/clickhouse-keyring.gpg
+
+    # 3. Добавляем репозиторий
+    - name: Add ClickHouse repository
+      become: true
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=amd64] https://packages.clickhouse.com/deb stable main"
+        state: present
+        update_cache: yes
+
+    # 4. Устанавливаем ClickHouse
+    - name: Install ClickHouse
+      become: true
+      ansible.builtin.apt:
+        name:
+          - clickhouse-server
+          - clickhouse-client
+        state: present
+        update_cache: yes
+      notify: Restart clickhouse service
+
+    - name: Wait for ClickHouse config to be created
+      become: true
+      ansible.builtin.wait_for:
+        path: /etc/clickhouse-server/config.xml
+        state: present
+        timeout: 30
+
+    - name: Configure ClickHouse for external access
+      become: true
+      ansible.builtin.blockinfile:
+        path: /etc/clickhouse-server/config.xml
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: External access"
+        block: |
+          <!-- Listen on all interfaces -->
+          <listen_host>0.0.0.0</listen_host>
+        insertafter: "<interserver_http_port>9009</interserver_http_port>"
+      notify: Restart clickhouse service
+
     - name: Flush handlers
       meta: flush_handlers
+
+    # 6. Создание базы данных
     - name: Create database
-      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      ansible.builtin.shell: |
+        sleep 5
+        clickhouse-client -q 'create database if not exists logs;' 2>/dev/null || true
       register: create_db
-      failed_when: create_db.rc != 0 and create_db.rc !=82
-      changed_when: create_db.rc == 0
+      changed_when: "'already exists' not in create_db.stderr"
+
+    # 7. Создание таблицы demo_logs
+    - name: Create demo_logs table
+      ansible.builtin.shell: |
+        clickhouse-client -d logs -q "
+        CREATE TABLE IF NOT EXISTS demo_logs (
+            timestamp DateTime,
+            appname String,
+            facility String,
+            hostname String,
+            message String,
+            msgid String,
+            procid UInt32,
+            severity String,
+            version UInt8
+        ) ENGINE = MergeTree()
+        ORDER BY timestamp" 2>/dev/null || true
+      register: create_table
+      changed_when: "'already exists' not in create_table.stderr"
+
+- name: Install Vector on Ubuntu
+  hosts: vector
+  tags: vector
+  handlers:
+    - name: Restart vector service
+      become: true
+      ansible.builtin.service:
+        name: vector
+        state: restarted
+
+  tasks:
+    # 1. Устанавливаем зависимости
+    - name: Install required packages for Vector
+      become: true
+      ansible.builtin.apt:
+        name:
+          - gnupg
+          - wget
+          - curl
+        state: present
+        update_cache: yes
+
+    # 2. Устанавливаем Vector через официальный скрипт
+    - name: Install Vector
+      become: true
+      ansible.builtin.shell: |
+        bash -c "$(curl -L https://setup.vector.dev)"
+        apt-get update
+        apt-get install -y vector
+      args:
+        creates: /usr/bin/vector
+
+    # 3. Создаем директорию для конфигурации Vector
+    - name: Create Vector config directory
+      become: true
+      ansible.builtin.file:
+        path: /etc/vector
+        state: directory
+        mode: '0755'
+
+    # 4. Деплоим конфигурацию Vector через Jinja2 шаблон
+    - name: Deploy Vector configuration via template
+      become: true
+      ansible.builtin.template:
+        src: "templates/vector.yml.j2"
+        dest: "/etc/vector/vector.yml"
+        mode: '0644'
+        owner: root
+        group: root
+      notify: Restart vector service
+
+    # 5. Проверяем конфигурацию Vector
+    - name: Validate Vector configuration
+      become: true
+      ansible.builtin.shell: |
+        vector validate --config-yaml /etc/vector/vector.yml
+      changed_when: false
+      ignore_errors: true
+
+    # 6. Запускаем Vector
+    - name: Ensure Vector service is running
+      become: true
+      ansible.builtin.systemd:
+        name: vector
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+- name: Install nginx and lighthouse
+  hosts: lighthouse
+  vars:
+    nginx_user: www-data
+    lighthouse_local_dir: /var/www/lighthouse
+  handlers:
+    - name: Reload nginx
+      become: true
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+    
+    - name: Restart nginx
+      become: true
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+  tasks:
+    # 1. Устанавливаем зависимости
+    - name: NGINX | Install NGINX and dependencies
+      become: true
+      ansible.builtin.apt:
+        name:
+          - nginx
+          - curl
+          - wget
+          - unzip
+          - git
+        state: present
+        update_cache: yes
+
+    # 2. Основная конфигурация nginx
+    - name: NGINX | Create general config
+      become: true
+      ansible.builtin.template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        mode: "0644"
+      notify: Restart nginx
+
+    # 3. Создаем директорию для lighthouse
+    - name: Create lighthouse directory
+      become: true
+      ansible.builtin.file:
+        path: "{{ lighthouse_local_dir }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+
+    # 4. Проверяем существование lighthouse
+    - name: Check if Lighthouse already exists
+      ansible.builtin.stat:
+        path: "{{ lighthouse_local_dir }}/index.html"
+      register: lighthouse_exists
+
+    # 5. Скачиваем lighthouse (только если не существует)
+    - name: Download Lighthouse archive
+      ansible.builtin.get_url:
+        url: "https://github.com/VKCOM/lighthouse/archive/refs/heads/master.zip"
+        dest: /tmp/lighthouse.zip
+        mode: '0644'
+      when: not lighthouse_exists.stat.exists
+
+    # 6. Распаковываем lighthouse
+    - name: Extract Lighthouse
+      become: true
+      ansible.builtin.unarchive:
+        src: /tmp/lighthouse.zip
+        dest: /tmp/
+        remote_src: yes
+        creates: /tmp/lighthouse-master/
+      when: not lighthouse_exists.stat.exists
+
+    # 7. Копируем файлы lighthouse
+    - name: Copy Lighthouse files to target directory
+      become: true
+      ansible.builtin.copy:
+        src: /tmp/lighthouse-master/
+        dest: "{{ lighthouse_local_dir }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+        mode: '0755'
+        remote_src: yes
+      when: not lighthouse_exists.stat.exists
+
+    # 8. Устанавливаем правильные права
+    - name: Set proper permissions for Lighthouse
+      become: true
+      ansible.builtin.file:
+        path: "{{ lighthouse_local_dir }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+        recurse: yes
+
+    # 9. Настраиваем nginx для lighthouse
+    - name: Configure Nginx for Lighthouse
+      become: true
+      ansible.builtin.template:
+        src: templates/lighthouse.conf.j2
+        dest: /etc/nginx/conf.d/lighthouse.conf
+        mode: '0644'
+      notify: Reload nginx
+
+    # 10. Удаляем дефолтную конфигурацию nginx
+    - name: Remove default nginx config
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    # 11. Проверяем конфигурацию nginx
+    - name: Validate nginx configuration
+      become: true
+      ansible.builtin.shell: |
+        nginx -t
+      changed_when: false
+
+    # 12. Запускаем и включаем nginx
+    - name: Start and enable Nginx
+      become: true
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: yes

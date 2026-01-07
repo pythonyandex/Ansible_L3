@@ -1,0 +1,19 @@
+data_dir: "/var/lib/vector"
+
+sources:
+  demo_logs:
+    type: demo_logs
+    format: json
+    interval: 1
+
+sinks:
+  clickhouse:
+    type: clickhouse
+    inputs: ["demo_logs"]
+    endpoint: "http://10.1.0.22:8123"
+    database: logs
+    table: demo_logs
+    format: "json_each_row"
+    skip_unknown_fields: true
+    healthcheck:
+      enabled: false
