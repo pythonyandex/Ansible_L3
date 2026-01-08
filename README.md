@@ -3,14 +3,16 @@
 ## Подготовка к выполнению
 
 1. Подготовьте в Yandex Cloud три хоста: для `clickhouse`, для `vector` и для `lighthouse`.
-   При помощи terraform запускается три ВМ с приватными и публичными адресами, после данные из output переносятся в inventory/prod.yml
+Решение 1. При помощи terraform запускается три ВМ с приватными и публичными адресами, после данные из output переносятся в inventory/prod.yml
 3. Репозиторий LightHouse находится [по ссылке](https://github.com/VKCOM/lighthouse).
 
 ## Основная часть
 
 1. Допишите playbook: нужно сделать ещё один play, который устанавливает и настраивает LightHouse.
+Решение 1. Playbook был дописан - [site.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/site.yml)
 2. При создании tasks рекомендую использовать модули: `get_url`, `template`, `yum`, `apt`.
 3. Tasks должны: скачать статику LightHouse, установить Nginx или любой другой веб-сервер, настроить его конфиг для открытия LightHouse, запустить веб-сервер.
+Решение 3. Конфиги залиты в [template](https://github.com/pythonyandex/Ansible_L3/tree/main/playbook/templates), очень много их менял, но до конца разобраться с работой vector/clickhouse пока не получилось, надо смотреть видео.
 4. Подготовьте свой inventory-файл `prod.yml`.
 5. Запустите `ansible-lint site.yml` и исправьте ошибки, если они есть.
 6. Попробуйте запустить playbook на этом окружении с флагом `--check`.
