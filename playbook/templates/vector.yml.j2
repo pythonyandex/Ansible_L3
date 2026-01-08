@@ -10,7 +10,7 @@ sinks:
   clickhouse:
     type: clickhouse
     inputs: ["demo_logs"]
-    endpoint: "http://10.1.0.22:8123"
+    endpoint: "http://{{ hostvars['clickhouse-01'].private_ip }}:8123"
     database: logs
     table: demo_logs
     skip_unknown_fields: true
