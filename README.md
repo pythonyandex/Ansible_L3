@@ -12,16 +12,16 @@
 
 1. Допишите playbook: нужно сделать ещё один play, который устанавливает и настраивает LightHouse.
 
-                 **Решение 1**. Playbook был дописан - [site.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/site.yml)
+   **Решение 1**. Playbook был дописан - [site.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/site.yml)
 
 2. При создании tasks рекомендую использовать модули: `get_url`, `template`, `yum`, `apt`.
 3. Tasks должны: скачать статику LightHouse, установить Nginx или любой другой веб-сервер, настроить его конфиг для открытия LightHouse, запустить веб-сервер.
 
-                 **Решение 3**. Конфиги залиты в [template](https://github.com/pythonyandex/Ansible_L3/tree/main/playbook/templates), очень много их менял, но до конца разобраться с работой vector/clickhouse пока не получилось, надо смотреть видео.
+   **Решение 3**. Конфиги залиты в [template](https://github.com/pythonyandex/Ansible_L3/tree/main/playbook/templates), очень много их менял, но до конца разобраться с работой vector/clickhouse пока не получилось, надо смотреть видео.
 
 4. Подготовьте свой inventory-файл `prod.yml`.
 
-                 **Решение 4**. [prod.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/inventory/prod.yml) заполняется в соотвествии с terraform output.
+   **Решение 4**. [prod.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/inventory/prod.yml) заполняется в соотвествии с terraform output.
 
 5. Запустите `ansible-lint site.yml` и исправьте ошибки, если они есть.
 6. Попробуйте запустить playbook на этом окружении с флагом `--check`.
