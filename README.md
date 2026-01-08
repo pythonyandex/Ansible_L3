@@ -20,7 +20,7 @@
 
 4. Подготовьте свой inventory-файл `prod.yml`.
 
-  Решение 4. [prod.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/inventory/prod.yml) заполняется в соотвествии с terraform output.
+      Решение 4. [prod.yml](https://github.com/pythonyandex/Ansible_L3/blob/main/playbook/inventory/prod.yml) заполняется в соотвествии с terraform output.
 
 5. Запустите `ansible-lint site.yml` и исправьте ошибки, если они есть.
 6. Попробуйте запустить playbook на этом окружении с флагом `--check`.
