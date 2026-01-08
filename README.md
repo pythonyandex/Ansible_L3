@@ -4,7 +4,7 @@
 
 1. Подготовьте в Yandex Cloud три хоста: для `clickhouse`, для `vector` и для `lighthouse`.
 
-          **Решение 1**. При помощи terraform запускается три ВМ с приватными и публичными адресами, после данные из output переносятся в inventory/prod.yml
+      **Решение 1**. При помощи terraform запускается три ВМ с приватными и публичными адресами, после данные из output переносятся в inventory/prod.yml
    
 3. Репозиторий LightHouse находится [по ссылке](https://github.com/VKCOM/lighthouse).
 
