@@ -1,6 +1,6 @@
 ---
 - name: Install ClickHouse on Ubuntu
-  hosts: clickhouse
+  hosts: localhost
   handlers:
     - name: Restart clickhouse service
       become: true
@@ -91,69 +91,21 @@
       changed_when: "'already exists' not in create_table.stderr"
 
 - name: Install Vector on Ubuntu
-  hosts: vector
+  hosts: localhost
+  vars:
+    # Переменные для роли Vector
+    clickhouse_host: "{{ hostvars['clickhouse-01'].private_ip }}"
+    clickhouse_port: 8123
+    clickhouse_database: logs
+    clickhouse_table: demo_logs
+    
+  roles:
+    - role: roles/vector
   tags: vector
-  handlers:
-    - name: Restart vector service
-      become: true
-      ansible.builtin.service:
-        name: vector
-        state: restarted
 
-  tasks:
-    - name: Install required packages for Vector
-      become: true
-      ansible.builtin.apt:
-        name:
-          - gnupg
-          - wget
-          - curl
-        state: present
-        update_cache: yes
-
-    - name: Install Vector
-      become: true
-      ansible.builtin.shell: |
-        bash -c "$(curl -L https://setup.vector.dev)"
-        apt-get update
-        apt-get install -y vector
-      args:
-        creates: /usr/bin/vector
-
-    - name: Create Vector config directory
-      become: true
-      ansible.builtin.file:
-        path: /etc/vector
-        state: directory
-        mode: '0755'
-
-    - name: Deploy Vector configuration via template
-      become: true
-      ansible.builtin.template:
-        src: "templates/vector.yml.j2"
-        dest: "/etc/vector/vector.yml"
-        mode: '0644'
-        owner: root
-        group: root
-      notify: Restart vector service
-
-    - name: Validate Vector configuration
-      become: true
-      ansible.builtin.shell: |
-        vector validate --config-yaml /etc/vector/vector.yml
-      changed_when: false
-      ignore_errors: true
-
-    - name: Ensure Vector service is running
-      become: true
-      ansible.builtin.systemd:
-        name: vector
-        state: started
-        enabled: yes
-        daemon_reload: yes
 
 - name: Install nginx and lighthouse
-  hosts: lighthouse
+  hosts: localhost
   vars:
     nginx_user: www-data
     lighthouse_local_dir: /var/www/lighthouse

@@ -1,0 +1,23 @@
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_host: 127.0.0.1
+      ansible_user: ruslan
+      become: true
+      become_method: sudo
+      
+      # Симулируем структуру как в продакшене
+
+      private_ip: 127.0.0.1
+      
+  children:
+    clickhouse:
+      hosts:
+        localhost:
+    vector:
+      hosts:
+        localhost:
+    lighthouse:
+      hosts:
+        localhost:
